@@ -21,7 +21,13 @@ enum Restorer {
     static func restore(_ snapshot: Snapshot) -> [RestoreOutcome] {
         let live = WindowCatalog.list()
         let displays = Displays.active()
+        let originalSpaces = Spaces.all()
         var claimed = Set<CGWindowID>()
+        var privateMoveWorks = true
+        var switchedDesktops = false
+        defer {
+            if switchedDesktops { SpaceSwitcher.showDesktops(originalSpaces, on: displays) }
+        }
 
         return snapshot.windows.map { saved in
             guard let (window, exact) = saved.match(in: live, excluding: claimed) else {
@@ -74,9 +80,18 @@ enum Restorer {
             if !saved.onAllDesktops && !saved.wasMinimized && !saved.wasFullscreen {
                 switch resolveSpace(saved, on: target) {
                 case .found(let space):
-                    if !PrivateAPI.moveWindow(window.id, toSpace: space.id) {
+                    if PrivateAPI.spaces(forWindow: window.id) == [space.id] { break }
+                    if privateMoveWorks {
+                        if PrivateAPI.moveWindow(window.id, toSpace: space.id) { break }
+                        privateMoveWorks = false // blocked on this macOS; don't retry for each window
+                    }
+                    switchedDesktops = true
+                    switch SpaceSwitcher.carry(element, id: window.id, pid: window.pid, to: space, on: target) {
+                    case .success:
+                        _ = element.setFrame(frame) // the drag nudged it
+                    case .failure(let reason):
                         partial = true
-                        notes.append("Could not move to Desktop \(space.desktopIndex ?? 0); left on the display's current desktop")
+                        notes.append("Could not move to Desktop \(space.desktopIndex ?? 0): \(reason)")
                     }
                 case .missing(let reason):
                     partial = true

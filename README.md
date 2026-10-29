@@ -18,9 +18,18 @@ open build/WindowRestore.app
 On first launch, click **Grant Access…** and enable Window Restore under
 System Settings → Privacy & Security → Accessibility, then **Check Again**.
 
-The build is ad-hoc signed, so macOS treats every rebuild as a new app and
-the Accessibility switch must be toggled off and on again. To avoid that,
-build with a real identity: `SIGN_IDENTITY="Apple Development: …" ./scripts/build-app.sh`.
+The build is ad-hoc signed, so macOS treats every rebuild as a new app. The
+old approval still shows as on in System Settings but no longer applies, and
+the app keeps asking for access. After each rebuild, clear the stale entry,
+relaunch, and approve it again:
+
+```bash
+tccutil reset Accessibility local.windowrestore
+open build/WindowRestore.app
+```
+
+To avoid this, build with a stable signing identity:
+`SIGN_IDENTITY="Apple Development: …" ./scripts/build-app.sh`.
 
 ## Use
 
@@ -53,7 +62,7 @@ Snapshots are stored in `~/Library/Application Support/WindowRestore/snapshots.j
 | Remember a position | Frame relative to the display's top-left, so it still works if you rearrange displays; clamped if the display's resolution changed |
 | Identify a window | `CGWindowID` + PID (same window still open); otherwise the same app with the same title |
 | Identify a desktop | Space ID, then Space UUID, then desktop number on that display. After a reconnect, the external display's Spaces are usually new, so "Desktop 2 of the LG monitor" is what still matches |
-| Move to a desktop | Private SkyLight calls: the compat-ID method that works after macOS 14.5, falling back to `SLSMoveWindowsToManagedSpace` |
+| Move to a desktop | Private SkyLight calls where the window server still allows them (up to macOS 14.x). On macOS 15 and later these are blocked for ordinary apps, so it drags the window by its title bar while pressing the "Move left/right a space" shortcut |
 
 Restore order per window: leave full screen or unminimize if needed → set
 the frame on the target display (macOS puts it on that display's current
@@ -62,10 +71,15 @@ that's how it was saved.
 
 ## Limitations
 
-- **Moving windows between desktops uses private API.** It has no public
-  equivalent, and Apple has broken it before (macOS 14.5). If it fails, the
-  window still goes to the right display and position, and the report says
-  "Could not move to Desktop N".
+- **Moving windows between desktops on macOS 15+ is visible.** You'll see
+  the desktops slide while windows are carried across. Don't touch the mouse
+  until it finishes. Afterwards each display returns to the desktop it was
+  showing. This needs the "Move left a space" / "Move right a space"
+  shortcuts turned on (System Settings › Keyboard › Keyboard Shortcuts ›
+  Mission Control). They're on by default.
+- If a desktop move fails anyway, the window still goes to the right display
+  and position, and the report says "Could not move to Desktop N" with the
+  reason.
 - If a desktop no longer exists (e.g. you had 3 on the external display and
   macOS recreated only 1), the window stays on that display's current desktop.
   The app does not create desktops.
