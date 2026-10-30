@@ -36,7 +36,8 @@ To avoid this, build with a stable signing identity:
 - **Capture** tab: windows on every display and desktop, grouped by
   "Display — Desktop N". Tick the ones you want, name the snapshot, save.
 - **Snapshots** tab, or the menu bar icon: **Restore**. A report lists each
-  window as restored, partly restored, not open, or display not connected.
+  window as moved, already in place, partly restored, not open, or display
+  not connected, with totals such as "3 moved, 5 already in place".
 - **⋯ → Update with Current Positions** re-captures a snapshot's windows
   that are still open.
 

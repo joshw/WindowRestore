@@ -3,18 +3,31 @@ import CoreGraphics
 import Foundation
 
 struct RestoreOutcome: Identifiable {
-    enum Status: String {
-        case restored = "Restored"
+    enum Status: String, CaseIterable {
+        case restored = "Moved"
+        case alreadyInPlace = "Already in place"
         case partial = "Partly restored"
         case notOpen = "Not open"
         case displayMissing = "Display not connected"
         case failed = "Failed"
+
+        var succeeded: Bool { self == .restored || self == .alreadyInPlace }
     }
 
     let id = UUID()
     let window: SavedWindow
     let status: Status
     let notes: [String]
+
+    /// "3 moved, 5 already in place, 1 not open": the first two counts are
+    /// always shown, the rest only when non-zero.
+    static func summary(_ outcomes: [RestoreOutcome]) -> String {
+        Status.allCases.compactMap { status in
+            let count = outcomes.filter { $0.status == status }.count
+            guard count > 0 || status == .restored || status == .alreadyInPlace else { return nil }
+            return "\(count) \(status.rawValue.lowercased())"
+        }.joined(separator: ", ")
+    }
 }
 
 enum Restorer {
@@ -53,6 +66,18 @@ enum Restorer {
                 return RestoreOutcome(window: saved, status: .failed, notes: notes + ["No displays found"])
             }
 
+            // Moving the frame onto the target display also puts the window on
+            // that display's current Space; the Space is fixed up afterwards.
+            let frame = clamp(saved.relativeFrame.offsetBy(dx: target.frame.minX, dy: target.frame.minY),
+                              to: target.frame)
+            let space = saved.onAllDesktops || saved.wasMinimized || saved.wasFullscreen
+                ? nil : resolveSpace(saved, on: target)
+
+            if isInPlace(window, saved, frame: frame, space: space) {
+                if case .missing(let reason)? = space { notes.append(reason) }
+                return RestoreOutcome(window: saved, status: .alreadyInPlace, notes: notes)
+            }
+
             var partial = false
 
             if window.isFullscreen && !saved.wasFullscreen {
@@ -63,10 +88,6 @@ enum Restorer {
                 element.set(kAXMinimizedAttribute, kCFBooleanFalse)
             }
 
-            // Moving the frame onto the target display also puts the window on
-            // that display's current Space; the Space is fixed up afterwards.
-            let frame = clamp(saved.relativeFrame.offsetBy(dx: target.frame.minX, dy: target.frame.minY),
-                              to: target.frame)
             if !(window.isFullscreen && saved.wasFullscreen) {
                 if !element.setFrame(frame) {
                     partial = true
@@ -77,8 +98,8 @@ enum Restorer {
                 }
             }
 
-            if !saved.onAllDesktops && !saved.wasMinimized && !saved.wasFullscreen {
-                switch resolveSpace(saved, on: target) {
+            if let space {
+                switch space {
                 case .found(let space):
                     if PrivateAPI.spaces(forWindow: window.id) == [space.id] { break }
                     if privateMoveWorks {
@@ -108,6 +129,21 @@ enum Restorer {
 
             return RestoreOutcome(window: saved, status: partial ? .partial : .restored, notes: notes)
         }
+    }
+
+    /// True when the window already matches the snapshot, so restoring would
+    /// not move it. A desktop that no longer exists can't be fixed, so it
+    /// doesn't count against being in place.
+    private static func isInPlace(_ window: LiveWindow, _ saved: SavedWindow,
+                                  frame: CGRect, space: SpaceResolution?) -> Bool {
+        guard window.isMinimized == saved.wasMinimized, window.isFullscreen == saved.wasFullscreen else { return false }
+        if saved.wasMinimized || saved.wasFullscreen { return true }
+        let tolerance: CGFloat = 2
+        guard abs(window.frame.minX - frame.minX) <= tolerance, abs(window.frame.minY - frame.minY) <= tolerance,
+              abs(window.frame.width - frame.width) <= tolerance, abs(window.frame.height - frame.height) <= tolerance
+        else { return false }
+        if case .found(let s)? = space { return window.spaceIDs == [s.id] }
+        return true
     }
 
     private enum SpaceResolution {

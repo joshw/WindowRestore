@@ -75,7 +75,7 @@ final class AppModel: ObservableObject {
                 self.outcomes = outcomes
                 self.outcomesTitle = "Restored “\(snapshot.name)” at \(Date().formatted(date: .omitted, time: .shortened))"
                 self.isBusy = false
-                completion?(outcomes.allSatisfy { $0.status == .restored })
+                completion?(outcomes.allSatisfy(\.status.succeeded))
             }
         }
     }

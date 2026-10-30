@@ -258,6 +258,7 @@ struct OutcomesView: View {
         } label: {
             HStack {
                 Text(title).font(.headline)
+                Text(RestoreOutcome.summary(outcomes)).foregroundStyle(.secondary)
                 Spacer()
                 Button("Dismiss") { model.outcomes = nil }.buttonStyle(.link)
             }
@@ -267,6 +268,7 @@ struct OutcomesView: View {
     private func icon(_ s: RestoreOutcome.Status) -> String {
         switch s {
         case .restored: "checkmark.circle.fill"
+        case .alreadyInPlace: "checkmark.circle"
         case .partial: "exclamationmark.circle.fill"
         case .notOpen: "minus.circle"
         case .displayMissing: "display.trianglebadge.exclamationmark"
@@ -277,6 +279,7 @@ struct OutcomesView: View {
     private func color(_ s: RestoreOutcome.Status) -> Color {
         switch s {
         case .restored: .green
+        case .alreadyInPlace: .secondary
         case .partial, .displayMissing: .orange
         case .notOpen: .secondary
         case .failed: .red

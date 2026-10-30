@@ -45,7 +45,8 @@ enum CLI {
                 print("\(o.status.rawValue): \(o.window.label)")
                 o.notes.forEach { print("    \($0)") }
             }
-            return outcomes.allSatisfy { $0.status == .restored || $0.status == .notOpen } ? 0 : 2
+            print(RestoreOutcome.summary(outcomes))
+            return outcomes.allSatisfy { $0.status.succeeded || $0.status == .notOpen } ? 0 : 2
 
         default:
             fputs("""
