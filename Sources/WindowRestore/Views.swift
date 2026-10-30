@@ -63,7 +63,11 @@ struct MainView: View {
             }
             .padding()
         }
-        .onAppear { model.refresh() }
+        .onAppear {
+            model.refresh()
+            // Ask on launch; a rebuild clears the approval and nothing else would prompt.
+            if !AXIsProcessTrusted() { model.requestAccessibility() }
+        }
     }
 }
 
@@ -172,17 +176,37 @@ struct SnapshotsView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var store: SnapshotStore
 
+    @AppStorage("reportHeight") private var reportHeight: Double = 200
+    @State private var dragStartHeight: Double?
+
+    // SwiftUI's VSplitView wouldn't let the divider move here, so the report
+    // gets its own drag handle and a remembered height.
     var body: some View {
-        // A split view so the report can be made taller by dragging the divider.
-        VSplitView {
-            snapshotList
-                .frame(minHeight: 120)
-            if let outcomes = model.outcomes {
-                OutcomesView(title: model.outcomesTitle, outcomes: outcomes)
-                    .padding(.top, 6)
-                    .frame(minHeight: 100, idealHeight: 200)
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                snapshotList
+                    .frame(maxHeight: .infinity)
+                if let outcomes = model.outcomes {
+                    ResizeHandle()
+                        .gesture(
+                            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                                .onChanged { drag in
+                                    let start = dragStartHeight ?? reportHeight
+                                    dragStartHeight = start
+                                    reportHeight = limit(start - drag.translation.height, in: geo.size.height)
+                                }
+                                .onEnded { _ in dragStartHeight = nil }
+                        )
+                    OutcomesView(title: model.outcomesTitle, outcomes: outcomes)
+                        .frame(height: limit(reportHeight, in: geo.size.height))
+                }
             }
         }
+    }
+
+    /// Keeps the report at least 80pt tall while leaving the list 120pt.
+    private func limit(_ height: Double, in total: CGFloat) -> Double {
+        min(max(height, 80), max(80, Double(total) - 120))
     }
 
     @ViewBuilder private var snapshotList: some View {
@@ -196,6 +220,25 @@ struct SnapshotsView: View {
                     SnapshotRow(snapshot: snapshot)
                 }
             }
+        }
+    }
+}
+
+struct ResizeHandle: View {
+    @State private var hovering = false
+
+    var body: some View {
+        ZStack {
+            Divider()
+            Capsule().fill(.tertiary).frame(width: 40, height: 4)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 12)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            guard inside != hovering else { return }
+            hovering = inside
+            if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
         }
     }
 }

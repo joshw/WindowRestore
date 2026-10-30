@@ -18,6 +18,18 @@ final class AppModel: ObservableObject {
     func requestAccessibility() {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         accessibilityTrusted = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+        waitForAccessibility()
+    }
+
+    /// Notices when access is granted in System Settings and reloads, so
+    /// the banner clears without pressing Check Again.
+    private func waitForAccessibility() {
+        guard !AXIsProcessTrusted() else {
+            accessibilityTrusted = true
+            refresh()
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.waitForAccessibility() }
     }
 
     func refresh() {
