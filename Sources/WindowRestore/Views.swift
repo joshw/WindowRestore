@@ -173,22 +173,28 @@ struct SnapshotsView: View {
     @EnvironmentObject var store: SnapshotStore
 
     var body: some View {
-        VStack(alignment: .leading) {
-            if store.snapshots.isEmpty {
-                Spacer()
-                Text("No snapshots yet. Select windows on the Capture tab and save them.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                Spacer()
-            } else {
-                List {
-                    ForEach(store.snapshots.reversed()) { snapshot in
-                        SnapshotRow(snapshot: snapshot)
-                    }
-                }
-            }
+        // A split view so the report can be made taller by dragging the divider.
+        VSplitView {
+            snapshotList
+                .frame(minHeight: 120)
             if let outcomes = model.outcomes {
                 OutcomesView(title: model.outcomesTitle, outcomes: outcomes)
+                    .padding(.top, 6)
+                    .frame(minHeight: 100, idealHeight: 200)
+            }
+        }
+    }
+
+    @ViewBuilder private var snapshotList: some View {
+        if store.snapshots.isEmpty {
+            Text("No snapshots yet. Select windows on the Capture tab and save them.")
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List {
+                ForEach(store.snapshots.reversed()) { snapshot in
+                    SnapshotRow(snapshot: snapshot)
+                }
             }
         }
     }
@@ -254,7 +260,7 @@ struct OutcomesView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 160)
+            .frame(maxHeight: .infinity)
         } label: {
             HStack {
                 Text(title).font(.headline)
