@@ -19,16 +19,22 @@ On first launch, click **Grant Access…** and enable Window Restore under
 System Settings → Privacy & Security → Accessibility, then **Check Again**.
 
 The build is ad-hoc signed, so macOS treats every rebuild as a new app. The
-old approval still shows as on in System Settings but no longer applies, and
-the app keeps asking for access. After each rebuild, clear the stale entry,
-relaunch, and approve it again:
+old approval would still show as on in System Settings without applying, so
+`build-app.sh` clears it for you. After each rebuild, open the app and
+approve Accessibility again.
+
+If the app keeps asking even though System Settings shows it as allowed,
+clear the entry by hand and relaunch:
 
 ```bash
 tccutil reset Accessibility local.windowrestore
 open build/WindowRestore.app
 ```
 
-To avoid this, build with a stable signing identity:
+`tccutil` fails with `No such bundle identifier` (error -10814) if macOS
+hasn't seen the app yet. Run `build-app.sh` or open the app once, then retry.
+
+To avoid all of this, build with a stable signing identity:
 `SIGN_IDENTITY="Apple Development: …" ./scripts/build-app.sh`.
 
 ## Use

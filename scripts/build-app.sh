@@ -31,4 +31,17 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 codesign --force --sign "${SIGN_IDENTITY:--}" "$APP"
+
+# tccutil looks the bundle ID up through Launch Services, which only knows
+# apps it has seen, so register the fresh build first.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
+
+# An ad-hoc signature changes on every build, which leaves the old
+# Accessibility approval showing as on but no longer applying. Clear it so
+# the app asks again on launch.
+if [ -z "${SIGN_IDENTITY:-}" ]; then
+    tccutil reset Accessibility local.windowrestore >/dev/null 2>&1 || true
+    echo "Cleared the old Accessibility approval; approve the app again when it asks."
+fi
+
 echo "Built $APP"
