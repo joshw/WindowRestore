@@ -24,7 +24,8 @@ final class AppModel: ObservableObject {
         accessibilityTrusted = AXIsProcessTrusted()
         isBusy = true
         worker.async {
-            let windows = WindowCatalog.list()
+            // Background tabs follow the tab that's showing, so only that one is offered.
+            let windows = WindowCatalog.list().filter { !$0.isBackgroundTab }
             let spaces = Spaces.all()
             DispatchQueue.main.async {
                 self.windows = windows
@@ -55,7 +56,10 @@ final class AppModel: ObservableObject {
                 var claimed = Set<CGWindowID>()
                 var updated = snapshot
                 updated.windows = snapshot.windows.map { saved in
-                    guard let (w, _) = saved.match(in: live, excluding: claimed) else { return saved }
+                    guard let (matched, _) = saved.match(in: live, excluding: claimed),
+                          let w = matched.host(in: live), !claimed.contains(w.id)
+                    else { return saved }
+                    claimed.insert(matched.id)
                     claimed.insert(w.id)
                     var fresh = SavedWindow(w, displays: displays, spaces: spaces)
                     fresh.id = saved.id

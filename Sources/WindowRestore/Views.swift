@@ -269,6 +269,7 @@ struct OutcomesView: View {
         switch s {
         case .restored: "checkmark.circle.fill"
         case .alreadyInPlace: "checkmark.circle"
+        case .skipped: "arrow.uturn.right.circle"
         case .partial: "exclamationmark.circle.fill"
         case .notOpen: "minus.circle"
         case .displayMissing: "display.trianglebadge.exclamationmark"
@@ -279,7 +280,7 @@ struct OutcomesView: View {
     private func color(_ s: RestoreOutcome.Status) -> Color {
         switch s {
         case .restored: .green
-        case .alreadyInPlace: .secondary
+        case .alreadyInPlace, .skipped: .secondary
         case .partial, .displayMissing: .orange
         case .notOpen: .secondary
         case .failed: .red

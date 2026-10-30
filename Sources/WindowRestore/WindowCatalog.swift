@@ -13,8 +13,25 @@ struct LiveWindow: Identifiable {
     let isMinimized: Bool
     let isFullscreen: Bool
     let spaceIDs: [UInt64]
+    /// A tab that isn't showing in a native tab group (Terminal, Finder…).
+    /// Each tab is its own window, but hidden ones belong to no desktop and
+    /// move with the tab that is showing.
+    let isBackgroundTab: Bool
     /// nil when Accessibility access has not been granted.
     let element: AXUIElement?
+
+    /// The visible window of this window's tab group (itself if not a tab).
+    func host(in live: [LiveWindow]) -> LiveWindow? {
+        guard isBackgroundTab else { return self }
+        return live.first { $0.pid == pid && !$0.isBackgroundTab && !$0.spaceIDs.isEmpty && $0.frame.isClose(to: frame) }
+    }
+}
+
+extension CGRect {
+    func isClose(to other: CGRect, tolerance: CGFloat = 2) -> Bool {
+        abs(minX - other.minX) <= tolerance && abs(minY - other.minY) <= tolerance
+            && abs(width - other.width) <= tolerance && abs(height - other.height) <= tolerance
+    }
 }
 
 enum WindowCatalog {
@@ -80,6 +97,7 @@ enum WindowCatalog {
                 return nil
             }
             let axTitle = element?.string(kAXTitleAttribute)
+            let minimized = element?.bool(kAXMinimizedAttribute) ?? false
             return LiveWindow(
                 id: c.wid,
                 pid: c.app.processIdentifier,
@@ -87,9 +105,10 @@ enum WindowCatalog {
                 bundleID: c.app.bundleIdentifier,
                 title: [axTitle, c.cgTitle].compactMap { $0 }.first { !$0.isEmpty } ?? "",
                 frame: c.frame,
-                isMinimized: element?.bool(kAXMinimizedAttribute) ?? false,
+                isMinimized: minimized,
                 isFullscreen: element?.bool("AXFullScreen") ?? false,
                 spaceIDs: c.spaces,
+                isBackgroundTab: element != nil && c.spaces.isEmpty && !minimized && !c.app.isHidden,
                 element: element
             )
         }

@@ -10,8 +10,9 @@ struct RestoreOutcome: Identifiable {
         case notOpen = "Not open"
         case displayMissing = "Display not connected"
         case failed = "Failed"
+        case skipped = "Skipped"
 
-        var succeeded: Bool { self == .restored || self == .alreadyInPlace }
+        var succeeded: Bool { self == .restored || self == .alreadyInPlace || self == .skipped }
     }
 
     let id = UUID()
@@ -42,12 +43,31 @@ enum Restorer {
             if switchedDesktops { SpaceSwitcher.showDesktops(originalSpaces, on: displays) }
         }
 
+        let savedIDs = Set(snapshot.windows.map(\.windowID))
+
         return snapshot.windows.map { saved in
-            guard let (window, exact) = saved.match(in: live, excluding: claimed) else {
+            guard let match = saved.match(in: live, excluding: claimed) else {
                 return RestoreOutcome(window: saved, status: .notOpen, notes: [])
             }
-            claimed.insert(window.id)
-            var notes = exact ? [] : ["Matched by app and title (original window was closed)"]
+            claimed.insert(match.0.id)
+            var notes = match.exact ? [] : ["Matched by app and title (original window was closed)"]
+
+            // A background tab can't be moved on its own; move the window
+            // it's a tab of, unless that window has its own snapshot entry.
+            var window = match.0
+            if window.isBackgroundTab {
+                guard let host = window.host(in: live), !claimed.contains(host.id) else {
+                    return RestoreOutcome(window: saved, status: .skipped,
+                                          notes: notes + ["Background tab whose window is already handled"])
+                }
+                if savedIDs.contains(host.id) {
+                    return RestoreOutcome(window: saved, status: .skipped,
+                                          notes: notes + ["Background tab; its window is restored by its own entry"])
+                }
+                claimed.insert(host.id)
+                window = host
+                notes.append("Background tab, so the window it's in was restored")
+            }
 
             guard let element = window.element else {
                 return RestoreOutcome(window: saved, status: .failed, notes: notes + ["Accessibility access not granted"])
@@ -74,7 +94,7 @@ enum Restorer {
                 ? nil : resolveSpace(saved, on: target)
 
             if isInPlace(window, saved, frame: frame, space: space) {
-                if case .missing(let reason)? = space { notes.append(reason) }
+                if let note = space?.note { notes.append(note) }
                 return RestoreOutcome(window: saved, status: .alreadyInPlace, notes: notes)
             }
 
@@ -117,6 +137,8 @@ enum Restorer {
                 case .missing(let reason):
                     partial = true
                     notes.append(reason)
+                case .unrecorded(let reason):
+                    notes.append(reason)
                 }
             }
 
@@ -138,17 +160,24 @@ enum Restorer {
                                   frame: CGRect, space: SpaceResolution?) -> Bool {
         guard window.isMinimized == saved.wasMinimized, window.isFullscreen == saved.wasFullscreen else { return false }
         if saved.wasMinimized || saved.wasFullscreen { return true }
-        let tolerance: CGFloat = 2
-        guard abs(window.frame.minX - frame.minX) <= tolerance, abs(window.frame.minY - frame.minY) <= tolerance,
-              abs(window.frame.width - frame.width) <= tolerance, abs(window.frame.height - frame.height) <= tolerance
-        else { return false }
+        guard window.frame.isClose(to: frame) else { return false }
         if case .found(let s)? = space { return window.spaceIDs == [s.id] }
         return true
     }
 
     private enum SpaceResolution {
         case found(SpaceInfo)
+        /// The saved desktop can't be reached; the restore is incomplete.
         case missing(String)
+        /// The snapshot never knew the desktop; nothing more to do.
+        case unrecorded(String)
+
+        var note: String? {
+            switch self {
+            case .found: nil
+            case .missing(let s), .unrecorded(let s): s
+            }
+        }
     }
 
     /// Picks the Space on the target display: the exact Space if it still
@@ -166,7 +195,8 @@ enum Restorer {
             if let s = ds.spaces.first(where: { $0.desktopIndex == index }) { return .found(s) }
             return .missing("\(display.name) no longer has a Desktop \(index); left on its current desktop")
         }
-        return .missing("Original desktop unknown; left on the display's current desktop")
+        return .unrecorded("Snapshot has no desktop for this window (it was likely a background tab when saved), "
+            + "so only its position was restored. Use Update with Current Positions to fix this")
     }
 
     private static func clamp(_ rect: CGRect, to bounds: CGRect) -> CGRect {

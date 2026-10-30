@@ -24,7 +24,8 @@ enum CLI {
             for w in WindowCatalog.list() {
                 let display = Displays.best(for: w.frame, in: displays)?.name ?? "?"
                 print("[\(w.id)] \(w.appName) — \(w.title.isEmpty ? "(untitled)" : w.title)  \(w.frame)  "
-                    + "\(display) / \(Spaces.label(for: w.spaceIDs, in: spaces))\(w.element == nil ? "" : "  ax")")
+                    + "\(display) / \(w.isBackgroundTab ? "Background tab" : Spaces.label(for: w.spaceIDs, in: spaces))"
+                    + (w.element == nil ? "" : "  ax"))
             }
             return 0
 
@@ -40,12 +41,15 @@ enum CLI {
                 fputs("No snapshot named “\(name)”\n", stderr)
                 return 1
             }
+            print("Restoring “\(snapshot.name)” (\(snapshot.windows.count) windows)")
             let outcomes = Restorer.restore(snapshot)
+            let width = outcomes.map(\.status.rawValue.count).max() ?? 0
             for o in outcomes {
-                print("\(o.status.rawValue): \(o.window.label)")
-                o.notes.forEach { print("    \($0)") }
+                let status = o.status.rawValue.padding(toLength: width, withPad: " ", startingAt: 0)
+                print("  \(status)  \(o.window.label)")
+                o.notes.forEach { print("  \(String(repeating: " ", count: width))    ↳ \($0)") }
             }
-            print(RestoreOutcome.summary(outcomes))
+            print("Done: \(RestoreOutcome.summary(outcomes))")
             return outcomes.allSatisfy { $0.status.succeeded || $0.status == .notOpen } ? 0 : 2
 
         default:
